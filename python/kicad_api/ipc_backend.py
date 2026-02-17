@@ -110,7 +110,7 @@ class IPCBackend(KiCADBackend):
             return True
 
         except ImportError as e:
-            logger.error("kicad-python library not found")
+            logger.debug("kicad-python not installed; IPC backend unavailable (optional).")
             raise APINotAvailableError(
                 "IPC backend requires kicad-python. "
                 "Install with: pip install kicad-python"

@@ -55,23 +55,26 @@ if sys.platform == 'win32':
     for base_path in common_kicad_paths:
         if os.path.exists(base_path):
             logger.info(f"Found KiCAD installation at: {base_path}")
-            # List versions
             try:
                 versions = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
                 logger.info(f"  Versions found: {', '.join(versions)}")
                 for version in versions:
+                    # KiCAD 9 Windows: lib/python3/dist-packages or bin/Lib/site-packages
                     python_path = os.path.join(base_path, version, 'lib', 'python3', 'dist-packages')
+                    site_packages = os.path.join(base_path, version, 'bin', 'Lib', 'site-packages')
                     if os.path.exists(python_path):
                         logger.info(f"  ✓ Python path exists: {python_path}")
                         found_kicad = True
+                    elif os.path.exists(site_packages):
+                        logger.info(f"  ✓ Python path exists: {site_packages}")
+                        found_kicad = True
                     else:
-                        logger.warning(f"  ✗ Python path missing: {python_path}")
+                        logger.debug(f"  Python path not found for {version} (optional)")
             except Exception as e:
-                logger.warning(f"  Could not list versions: {e}")
+                logger.debug(f"  Could not list versions: {e}")
 
     if not found_kicad:
-        logger.warning("No KiCAD installations found in standard locations!")
-        logger.warning("Please ensure KiCAD 9.0+ is installed from https://www.kicad.org/download/windows/")
+        logger.debug("No KiCAD Python paths in standard locations; pcbnew may still load from PATH.")
 
     logger.info("========================================")
 
@@ -90,9 +93,13 @@ paths_added = PlatformHelper.add_kicad_to_python_path()
 if paths_added:
     logger.info("Successfully added KiCAD Python paths to sys.path")
 else:
-    logger.warning("No KiCAD Python paths found - attempting to import pcbnew from system path")
+    # When running with KiCAD's bundled Python, paths may already be set
+    if "KiCad" in sys.executable or "KiCAD" in sys.executable:
+        logger.debug("Using KiCAD bundled Python; pcbnew will be loaded from default path.")
+    else:
+        logger.debug("No KiCAD Python paths found - attempting to import pcbnew from system path")
 
-logger.info(f"Current Python path: {sys.path}")
+logger.debug(f"Current Python path: {sys.path}")
 
 # Check if auto-launch is enabled
 AUTO_LAUNCH_KICAD = os.environ.get("KICAD_AUTO_LAUNCH", "false").lower() == "true"
@@ -136,7 +143,7 @@ if not USE_IPC_BACKEND and KICAD_BACKEND != 'ipc':
         import pcbnew  # type: ignore
         logger.info(f"Successfully imported pcbnew module from: {pcbnew.__file__}")
         logger.info(f"pcbnew version: {pcbnew.GetBuildVersion()}")
-        logger.warning("Using SWIG backend - changes require manual reload in KiCAD UI")
+        logger.info("Using SWIG backend (file-based); reload in KiCAD UI to see changes.")
     except ImportError as e:
         logger.error(f"Failed to import pcbnew module: {e}")
         logger.error(f"Current sys.path: {sys.path}")

@@ -51,17 +51,32 @@ class PlatformHelper:
         paths = []
 
         if PlatformHelper.is_windows():
-            # Windows: Check Program Files
+            # Windows: Check Program Files (KiCAD 9+ uses bin/Lib/site-packages)
             program_files = [
                 Path("C:/Program Files/KiCad"),
                 Path("C:/Program Files (x86)/KiCad"),
             ]
             for pf in program_files:
-                # Check multiple KiCAD versions
+                if not pf.exists():
+                    continue
                 for version in ["9.0", "9.1", "10.0", "8.0"]:
+                    # KiCAD 9 on Windows: lib/python3/dist-packages (Debian-style)
                     path = pf / version / "lib" / "python3" / "dist-packages"
                     if path.exists():
                         paths.append(path)
+                    # KiCAD 9 on Windows: bin/Lib/site-packages (bundled Python)
+                    site_packages = pf / version / "bin" / "Lib" / "site-packages"
+                    if site_packages.exists():
+                        paths.append(site_packages)
+            # User 3rdparty Python (e.g. Documents/KiCad/9.0/3rdparty/Python311/site-packages)
+            for major in ["9.0", "8.0"]:
+                thirdparty = Path.home() / "Documents" / "KiCad" / major / "3rdparty"
+                if thirdparty.exists():
+                    for sub in thirdparty.iterdir():
+                        if sub.is_dir() and "Python" in sub.name:
+                            sp = sub / "site-packages"
+                            if sp.exists():
+                                paths.append(sp)
 
         elif PlatformHelper.is_linux():
             # Linux: Check common installation paths

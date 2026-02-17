@@ -61,6 +61,7 @@ logs/
 .env.*.local
 
 # KiCAD
+gerber_output/
 *.kicad_pcb-bak
 *.kicad_sch-bak
 *.kicad_pro-bak
@@ -82,3 +83,9 @@ data/
 # OS
 Thumbs.db
 Desktop.ini
+# Test projects
+*.kicad_pcb
+*.kicad_pro
+*.kicad_sch
+*-backups/
+TestProject/

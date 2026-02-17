@@ -43,7 +43,7 @@ class LibraryManager:
             logger.info(f"Loading global fp-lib-table from: {global_table}")
             self._parse_fp_lib_table(global_table)
         else:
-            logger.warning(f"Global fp-lib-table not found at: {global_table}")
+            logger.debug("Global fp-lib-table not found; project tables will be used when available.")
 
         # Load project-specific libraries if project path provided
         if self.project_path:
@@ -52,7 +52,12 @@ class LibraryManager:
                 logger.info(f"Loading project fp-lib-table from: {project_table}")
                 self._parse_fp_lib_table(project_table)
 
-        logger.info(f"Loaded {len(self.libraries)} footprint libraries")
+        if not self.libraries:
+            self._load_default_kicad_footprints()
+        if self.libraries:
+            logger.info(f"Loaded {len(self.libraries)} footprint libraries")
+        else:
+            logger.debug("No footprint libraries found.")
 
     def _get_global_fp_lib_table(self) -> Optional[Path]:
         """Get path to global fp-lib-table file"""
@@ -74,6 +79,25 @@ class LibraryManager:
                 return path
 
         return None
+
+    def _load_default_kicad_footprints(self):
+        """When no fp-lib-table is found, load KiCAD's built-in footprint dir (.pretty folders)."""
+        foot_dir = self._find_kicad_footprint_dir()
+        if not foot_dir:
+            return
+        root = Path(foot_dir)
+        if not root.exists():
+            return
+        try:
+            for item in root.iterdir():
+                if item.is_dir() and item.suffix == ".pretty":
+                    nickname = item.stem  # e.g. Resistor_SMD
+                    self.libraries[nickname] = str(item)
+                    logger.debug(f"  Default library: {nickname} -> {item}")
+            if self.libraries:
+                logger.info(f"Loaded {len(self.libraries)} footprint libraries from KiCAD default path: {foot_dir}")
+        except Exception as e:
+            logger.warning(f"Could not load default footprints from {foot_dir}: {e}")
 
     def _parse_fp_lib_table(self, table_path: Path):
         """
@@ -156,26 +180,58 @@ class LibraryManager:
             return None
 
     def _find_kicad_footprint_dir(self) -> Optional[str]:
-        """Find KiCAD footprint directory"""
-        # Try common locations
-        possible_paths = [
-            "/usr/share/kicad/footprints",
-            "/usr/local/share/kicad/footprints",
-            "C:/Program Files/KiCad/9.0/share/kicad/footprints",
-            "C:/Program Files/KiCad/8.0/share/kicad/footprints",
-            "/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints",
-        ]
+        """Find KiCAD footprint directory (must contain .pretty subdirs)."""
+        import platform
+        possible_paths = []
 
-        # Also check environment variable
-        if 'KICAD9_FOOTPRINT_DIR' in os.environ:
-            possible_paths.insert(0, os.environ['KICAD9_FOOTPRINT_DIR'])
-        if 'KICAD8_FOOTPRINT_DIR' in os.environ:
-            possible_paths.insert(0, os.environ['KICAD8_FOOTPRINT_DIR'])
+        # Environment variables first
+        for var in ('KICAD9_FOOTPRINT_DIR', 'KICAD8_FOOTPRINT_DIR', 'KICAD_FOOTPRINT_DIR', 'KISYSMOD'):
+            if var in os.environ:
+                p = os.environ[var].strip()
+                if p:
+                    possible_paths.append(Path(p))
+
+        if platform.system() == "Windows":
+            # Windows: scan Program Files for KiCad/*/share/kicad/footprints
+            for base in (Path(os.environ.get("ProgramFiles", "C:/Program Files")),
+                         Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"))):
+                if not base.exists():
+                    continue
+                kicad_base = base / "KiCad"
+                if not kicad_base.exists():
+                    continue
+                for version_dir in sorted(kicad_base.iterdir(), reverse=True):
+                    if not version_dir.is_dir():
+                        continue
+                    for sub in ("share/kicad/footprints", "share/footprints"):
+                        candidate = version_dir / sub
+                        if candidate.is_dir():
+                            possible_paths.append(candidate)
+            # User 3rd party
+            for ver in ("9.0", "8.0", "7.0"):
+                up = Path.home() / "Documents" / "KiCad" / ver / "3rdparty" / "footprints"
+                if up.is_dir():
+                    possible_paths.append(up)
+        else:
+            # Linux / macOS
+            possible_paths.extend([
+                Path("/usr/share/kicad/footprints"),
+                Path("/usr/local/share/kicad/footprints"),
+                Path("/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints"),
+                Path("/Applications/KiCAD/KiCad.app/Contents/SharedSupport/footprints"),
+            ])
 
         for path in possible_paths:
-            if os.path.isdir(path):
-                return path
-
+            try:
+                path = Path(path).resolve()
+                if not path.is_dir():
+                    continue
+                # Must have at least one .pretty folder
+                for item in path.iterdir():
+                    if item.is_dir() and item.suffix == ".pretty":
+                        return str(path)
+            except (OSError, PermissionError):
+                continue
         return None
 
     def _find_kicad_3rdparty_dir(self) -> Optional[str]:

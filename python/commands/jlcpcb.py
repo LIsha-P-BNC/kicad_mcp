@@ -45,7 +45,7 @@ class JLCPCBClient:
         self.secret_key = secret_key or os.getenv('JLCPCB_API_SECRET')
 
         if not self.app_id or not self.access_key or not self.secret_key:
-            logger.warning("JLCPCB API credentials not found. Set JLCPCB_APP_ID, JLCPCB_API_KEY, and JLCPCB_API_SECRET environment variables.")
+            logger.debug("JLCPCB API credentials not set; API features will be unavailable.")
 
     @staticmethod
     def _generate_nonce() -> str:

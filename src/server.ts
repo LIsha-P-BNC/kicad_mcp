@@ -411,10 +411,20 @@ export class KiCADMcpServer {
         logger.error(`Python process error: ${err.message}`);
       });
       
-      // Set up error logging for stderr
+      // Forward Python stderr by log level (Python uses [INFO], [WARNING], [ERROR])
       if (this.pythonProcess.stderr) {
         this.pythonProcess.stderr.on('data', (data: Buffer) => {
-          logger.error(`Python stderr: ${data.toString()}`);
+          const text = data.toString();
+          const lines = text.split(/\r?\n/).filter((l) => l.trim());
+          for (const line of lines) {
+            if (/\[ERROR\]/.test(line)) {
+              logger.error(line);
+            } else if (/\[WARNING\]/.test(line)) {
+              logger.warn(line);
+            } else {
+              logger.debug(line);
+            }
+          }
         });
       }
 
